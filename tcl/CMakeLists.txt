@@ -1020,16 +1020,16 @@ IF(MINGW)
   set(TCL_MINGW_LIBS ws2_32)
 ENDIF(MINGW)
 
-add_library(tcl ${TCL_SRCS})
-target_link_libraries(tcl ${CoreFoundation_LIBRARIES} ${TCL_LINK_LIBS} ${DL_LIBRARY} ${CMAKE_THREAD_LIBS_INIT} ${TCL_MINGW_LIBS})
-install(TARGETS tcl 
+add_library(Tcl ${TCL_SRCS})
+target_link_libraries(Tcl ${CoreFoundation_LIBRARIES} ${TCL_LINK_LIBS} ${DL_LIBRARY} ${CMAKE_THREAD_LIBS_INIT} ${TCL_MINGW_LIBS})
+install(TARGETS Tcl 
 	RUNTIME DESTINATION ${BIN_DIR}
 	LIBRARY DESTINATION ${LIB_DIR}
 	ARCHIVE DESTINATION ${LIB_DIR})
 set(TCL_INSTALL_LIBNAME "${CMAKE_SHARED_LIBRARY_PREFIX}tcl${CMAKE_SHARED_LIBRARY_SUFFIX}")
-SET_TARGET_PROPERTIES(tcl PROPERTIES VERSION ${TCL_VERSION} SOVERSION ${TCL_VERSION_MAJOR}.${TCL_VERSION_MINOR})
+SET_TARGET_PROPERTIES(Tcl PROPERTIES VERSION ${TCL_VERSION} SOVERSION ${TCL_VERSION_MAJOR}.${TCL_VERSION_MINOR})
 IF(${CMAKE_SYSTEM_NAME} MATCHES "^Darwin$")
-  SET_TARGET_PROPERTIES(tcl PROPERTIES LINK_FLAGS "-compatibility_version ${TCL_VERSION_MAJOR}.${TCL_VERSION_MINOR} -current_version ${TCL_VERSION} -install_name \"${TCL_INSTALL_LIBNAME}\" -seg1addr 0xa000000 -sectcreate __TEXT __info_plist \"${TCL_BINARY_DIR}/Tcl-Info.plist\"")
+  SET_TARGET_PROPERTIES(Tcl PROPERTIES LINK_FLAGS "-compatibility_version ${TCL_VERSION_MAJOR}.${TCL_VERSION_MINOR} -current_version ${TCL_VERSION} -install_name \"${TCL_INSTALL_LIBNAME}\" -seg1addr 0xa000000 -sectcreate __TEXT __info_plist \"${TCL_BINARY_DIR}/Tcl-Info.plist\"")
   SET(EXTRA_TCLSH_LIBS "-sectcreate __TEXT __info_plist \"${TCL_BINARY_DIR}/Tclsh-Info.plist\"")
   configure_file(${CMAKE_CURRENT_SOURCE_DIR}/macosx/Tcl-Info.plist.in ${TCL_BINARY_DIR}/Tcl-Info.plist)
   configure_file(${CMAKE_CURRENT_SOURCE_DIR}/macosx/Tclsh-Info.plist.in ${TCL_BINARY_DIR}/Tclsh-Info.plist)
@@ -1054,7 +1054,7 @@ ELSE(WIN32)
 ENDIF(WIN32)
 
 add_executable(tclsh ${TCLSH_SRCS})
-target_link_libraries(tclsh tcl ${M_LIBRARY} ${TCL_THREADS_LIB} ${EXTRA_TCLSH_LIBS})
+target_link_libraries(tclsh Tcl ${M_LIBRARY} ${TCL_THREADS_LIB} ${EXTRA_TCLSH_LIBS})
 install(TARGETS tclsh DESTINATION bin)
 SET_TARGET_PROPERTIES(tclsh PROPERTIES VERSION ${TCL_VERSION_MAJOR}.${TCL_VERSION_MINOR})
 
@@ -1066,6 +1066,24 @@ SET(TCL_HDRS
   generic/tclTomMathDecls.h
   )
 install(FILES ${TCL_HDRS} DESTINATION include)
+
+include(CMakePackageConfigHelpers)
+write_basic_package_version_file(
+    "TclConfigVersion.cmake"
+    VERSION "${TCL_VERSION}"
+    COMPATIBILITY SameMajorVersion)
+
+configure_file("TclConfig.cmake.in" "TclConfig.cmake" @ONLY)
+install(FILES
+    "${CMAKE_CURRENT_BINARY_DIR}/TclConfig.cmake"
+    "${CMAKE_CURRENT_BINARY_DIR}/TclConfigVersion.cmake"
+    DESTINATION "lib/cmake/Tcl")
+
+install(TARGETS Tcl EXPORT TclTargets)
+install(EXPORT TclTargets
+    FILE "TclTargets.cmake"
+    NAMESPACE "Tcl::"
+    DESTINATION "lib/cmake/Tcl")
 
 MARK_AS_ADVANCED(TCL_LIBRARIES TCL_CONF_PREFIX TCL_INCLUDE_DIRS TCL_INCLUDE_PATH)
 MARK_AS_ADVANCED(TCL_STUB_LIBRARIES TCL_TCLSH TCL_TCLSH_EXECUTABLE)

@@ -31,3 +31,6 @@
 *.out
 *.app
 build
+
+# macOS system files
+.DS_Store
