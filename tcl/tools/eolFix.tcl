@@ -1,8 +1,6 @@
 ## Super aggressive EOL-fixer!
 ##
 ##  Will even understand screwed up ones like CRCRLF.
-##  (found in bad CVS repositories, caused by spacey developers
-##   abusing CVS)
 ##
 ##  davygrvy@pobox.com    3:41 PM 10/12/2001
 ##
@@ -13,16 +11,18 @@ namespace eval ::EOL {
     variable outMode crlf
 }
 
-proc EOL::fix {filename {newfilename ""}} {
+proc EOL::fix {filename {newfilename {}}} {
     variable outMode
 
-    if {![file exists $filename]} { return }
+    if {![file exists $filename]} {
+	return
+    }
     puts "EOL Fixing: $filename"
 
     file rename ${filename} ${filename}.o
     set fhnd [open ${filename}.o r]
 
-    if {$newfilename != ""} {
+    if {$newfilename ne ""} {
 	set newfhnd [open ${newfilename} w]
     } else {
 	set newfhnd [open ${filename} w]
@@ -63,12 +63,12 @@ proc EOL::fixall {args} {
 }
 
 if {$tcl_interactive == 0 && $argc > 0} {
-    if {[string index [lindex $argv 0] 0] == "-"} {
+    if {[string index [lindex $argv 0] 0] eq "-"} {
 	switch -- [lindex $argv 0] {
-	    -cr   { set ::EOL::outMode cr }
-	    -crlf { set ::EOL::outMode crlf }
-	    -lf   { set ::EOL::outMode lf }
-	    default { puts stderr "improper mode switch" ; exit 1 }
+	    -cr   {set ::EOL::outMode cr}
+	    -crlf {set ::EOL::outMode crlf}
+	    -lf   {set ::EOL::outMode lf}
+	    default {puts stderr "improper mode switch"; exit 1}
         }
 	set argv [lrange $argv 1 end]
     }

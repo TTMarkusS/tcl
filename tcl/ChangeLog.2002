@@ -15,7 +15,7 @@
 	* tests/winPipe.test:
 	* win/tclWinPipe.c (Tcl_WaitPid):
 	* win/tclWinTest.c:  Gave Tcl_WaitPid the ability to return a Win32
-	exception code translated into a posix style SIG*. This allows [close]
+	exception code translated into a Posix-style SIG*. This allows [close]
 	to report "CHILDKILLED" without the meaning getting lost in a
 	truncated exit code. In TclCleanupChildren(), TclpGetPid() had to get
 	moved to before Tcl_WaitPid() as the the handle is removed from the
@@ -847,7 +847,7 @@
 	exit.
 
 	* tests/exec.test: marked exec-18.1 unixOnly until the Windows
-	incompatability (in the test, not the core) can be resolved.
+	incompatibility (in the test, not the core) can be resolved.
 
 	* tests/http.test (http-3.11): added close $fp that was causing an
 	error on Windows because the file was not closed before deleting.
@@ -1753,7 +1753,7 @@
 
 2002-07-05  Reinhard Max  <max@suse.de>
 
-	* generic/tclClock.c (FormatClock): Convert the format string to UTF8
+	* generic/tclClock.c (FormatClock): Convert the format string to utf-8
 	before calling TclpStrftime, so that non-ASCII characters don't get
 	mangled when the result string is being converted back.
 	* tests/clock.test: Added a test for that.
@@ -1941,7 +1941,7 @@
 
 	* tests/pkg/samename.tcl: restored. needed by pkgMkIndex.test.
 
-	* library/tcltest/tcltest.tcl: restored writeability testing of
+	* library/tcltest/tcltest.tcl: restored writability testing of
 	-tmpdir, augmented by a special exception for the deafault value.
 
 2002-07-01  Donal K. Fellows  <fellowsd@cs.man.ac.uk>
@@ -1959,9 +1959,9 @@
 	* tests/info.test:	[temporaryDirectory] of tcltest.
 	* tests/interp.test:
 
-	* library/tcltest/tcltest.tcl:	Stopped checking for writeability of
+	* library/tcltest/tcltest.tcl:	Stopped checking for writability of
 	-tmpdir value because no default directory can be guaranteed to be
-	writeable.
+	writable.
 
 	* tests/autoMkindex.tcl: removed.
 	* tests/pkg/samename.tcl: removed.
@@ -2469,7 +2469,7 @@
 	thread-safe *_r counterparts are not available.
 	* unix/tcl.m4: added configure check for readdir_r
 	* unix/tcl.m4 (Darwin): set TCL_DEFAULT_ENCODING to utf-8 on MacOSX
-	(where posix file apis expect utf-8, not iso8859-1).
+	(where Posix file apis expect utf-8, not iso8859-1).
 	* unix/configure: regen
 	* unix/Makefile.in: set DYLD_LIBRARY_PATH in parallel to
 	LD_LIBRARY_PATH for MacOSX dynamic linker.
@@ -3642,7 +3642,7 @@
 	* compat/strtoll.c (strtoll):
 	* compat/strtoull.c (strtoull):
 	* unix/tclUnixPort.h:
-	* win/tclWinPort.h: Const-ing 64-bit compatability declarations. Note
+	* win/tclWinPort.h: Const-ing 64-bit compatibility declarations. Note
 	that the return pointer is non-const because it is entirely legal for
 	the functions to be called from somewhere that owns the string being
 	passed. Fixes problem reported by Larry Virden.
@@ -3683,7 +3683,7 @@
 
 	* win/tclAppInit.c: Changed #include "tcl.h" to be tclPort.h to remove
 	the raw windows.h include. tclPort.h brings in windows.h already and
-	lessens the pre-compiled-header mush and the randomly useless #pragma
+	lessens the precompiled-header mush and the randomly useless #pragma
 	comment (lib,...) references throughout the big windows.h tree (as
 	observed at high linker warning levels).
 
@@ -3779,7 +3779,7 @@
 
 	There are a lot of changes from this TIP, so please see
 	http://purl.org/tcl/tip/72.html for discussion of
-	backward-compatability issues, but the main ones modifications are in:
+	backward-compatibility issues, but the main ones modifications are in:
 
 	* generic/tcl.h: New types.
 	* generic/tcl.decls: New public functions.
@@ -3793,7 +3793,7 @@
 	* generic/tclIO.c: Large-file support (with many consequences.)
 	* compat/strtoll.c, compat/strtoull.c: New support functions.
 	* unix/tcl.m4, unix/configure: 64-bit support and greatly enhanced
-	cacheing.
+	caching.
 
 	Most other changes, including all those in doc/* and test/* as well as
 	the majority in the platform directories, follow on from these.

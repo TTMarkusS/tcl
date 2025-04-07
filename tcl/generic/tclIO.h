@@ -44,13 +44,13 @@ typedef struct ChannelBuffer {
     int bufLength;		/* How big is the buffer? */
     struct ChannelBuffer *nextPtr;
     				/* Next buffer in chain. */
-    char buf[4];		/* Placeholder for real buffer. The real
-				 * buffer occuppies this space + bufSize-4
+    char buf[TCLFLEXARRAY];		/* Placeholder for real buffer. The real
+				 * buffer occupies this space + bufSize-1
 				 * bytes. This must be the last field in the
 				 * structure. */
 } ChannelBuffer;
 
-#define CHANNELBUFFER_HEADER_SIZE	(sizeof(ChannelBuffer) - 4)
+#define CHANNELBUFFER_HEADER_SIZE	TclOffset(ChannelBuffer, buf)
 
 /*
  * How much extra space to allocate in buffer to hold bytes from previous
@@ -98,7 +98,7 @@ typedef struct Channel {
     struct ChannelState *state; /* Split out state information */
     ClientData instanceData;	/* Instance-specific data provided by creator
 				 * of channel. */
-    Tcl_ChannelType *typePtr;	/* Pointer to channel type structure. */
+    const Tcl_ChannelType *typePtr; /* Pointer to channel type structure. */
     struct Channel *downChanPtr;/* Refers to channel this one was stacked
 				 * upon. This reference is NULL for normal
 				 * channels. See Tcl_StackChannel. */
@@ -129,7 +129,7 @@ typedef struct ChannelState {
     char *channelName;		/* The name of the channel instance in Tcl
 				 * commands. Storage is owned by the generic
 				 * IO code, is dynamically allocated. */
-    int	flags;			/* ORed combination of the flags defined
+    int	flags;			/* OR'ed combination of the flags defined
 				 * below. */
     Tcl_Encoding encoding;	/* Encoding to apply when reading or writing
 				 * data on this channel. NULL means no
@@ -188,6 +188,9 @@ typedef struct ChannelState {
 				 * handlers ("fileevent") on this channel. */
     int bufSize;		/* What size buffers to allocate? */
     Tcl_TimerToken timer;	/* Handle to wakeup timer for this channel. */
+    Channel *timerChanPtr;	/* Needed in order to decrement the refCount of
+				   the right channel when the timer is
+				   deleted. */
     struct CopyState *csPtrR;	/* State of background copy for which channel
 				 * is input, or NULL. */
     struct CopyState *csPtrW;	/* State of background copy for which channel
@@ -206,7 +209,7 @@ typedef struct ChannelState {
      * TIP #219 ... Info for the I/O system ...
      * Error message set by channel drivers, for the propagation of arbitrary
      * Tcl errors. This information, if present (chanMsg not NULL), takes
-     * precedence over a posix error code returned by a channel operation.
+     * precedence over a Posix error code returned by a channel operation.
      */
 
     Tcl_Obj* chanMsg;
@@ -214,10 +217,12 @@ typedef struct ChannelState {
 				 * because it happened in the background. The
 				 * value is the chanMg, if any. #219's
 				 * companion to 'unreportedError'. */
+    int epoch;			/* Used to test validity of stored channelname
+				 * lookup results. */
 } ChannelState;
 
 /*
- * Values for the flags field in Channel. Any ORed combination of the
+ * Values for the flags field in Channel. Any OR'ed combination of the
  * following flags can be stored in the field. These flags record various
  * options and state bits about the channel. In addition to the flags below,
  * the channel can also have TCL_READABLE (1<<1) and TCL_WRITABLE (1<<2) set.
@@ -275,10 +280,16 @@ typedef struct ChannelState {
 					 * usable, but it may not be closed
 					 * again from within the close
 					 * handler. */
-#define CHANNEL_TAINTED		(1<<20)	/* Channel stack structure has changed.
-					 * Used by Channel Tcl_Obj type to
-					 * determine if we have to revalidate
-					 * the channel. */
+#define CHANNEL_CLOSEDWRITE	(1<<21)	/* Channel write side has been closed.
+					 * No further Tcl-level write IO on
+					 * the channel is allowed. */
+
+/*
+ * The length of time to wait between synthetic timer events. Must be zero or
+ * bad things tend to happen.
+ */
+
+#define SYNTHETIC_EVENT_TIME	0
 
 /*
  * Local Variables:

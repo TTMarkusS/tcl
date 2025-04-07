@@ -3,14 +3,14 @@
 # tclZIC.tcl --
 #
 #	Take the time zone data source files from Arthur Olson's
-#	repository at elsie.nci.nih.gov, and prepare time zone
+#	repository at https://www.iana.org/time-zones, and prepare time zone
 #	information files for Tcl.
 #
 # Usage:
 #	tclsh tclZIC.tcl inputDir outputDir
 #
 # Parameters:
-#	inputDir - Directory (e.g., tzdata2003e) where Olson's source
+#	inputDir - Directory (e.g., tzdata2022a) where Olson's source
 #		   files are to be found.
 #	outputDir - Directory (e.g., ../library/tzdata) where
 #		    the time zone information files are to be placed.
@@ -25,12 +25,10 @@
 #
 #----------------------------------------------------------------------
 #
-# Copyright (c) 2004 by Kevin B. Kenny.	 All rights reserved.
+# Copyright (c) 2004 Kevin B. Kenny.	 All rights reserved.
 # See the file "license.terms" for information on usage and redistribution
 # of this file, and for a DISCLAIMER OF ALL WARRANTIES.
 #----------------------------------------------------------------------
-
-package require Tcl 8.5
 
 # Define the names of the Olson files that we need to load.
 # We avoid the solar time files and the leap seconds.
@@ -38,7 +36,7 @@ package require Tcl 8.5
 set olsonFiles {
     africa antarctica asia australasia
     backward etcetera europe northamerica
-    pacificnew southamerica systemv
+    southamerica
 }
 
 # Define the year at which the DST information will stop.
@@ -358,7 +356,7 @@ proc parseON {on} {
 	  # third possibility - lastWeekday - field 5
 	  last([[:alpha:]]+)
 	)$
-    } $on -> dom1 wday2 dir2 num2 wday3]} then {
+    } $on -> dom1 wday2 dir2 num2 wday3]} {
 	error "can't parse ON field \"$on\""
     }
     if {$dom1 ne ""} {
@@ -509,7 +507,7 @@ proc parseTOD {tod} {
 	(?:
 	    ([wsugz])			# field 4 - type indicator
 	)?
-    } $tod -> hour minute second ind]} then {
+    } $tod -> hour minute second ind]} {
 	puts stderr "$fileName:$lno:can't parse time field \"$tod\""
 	incr errorCount
     }
@@ -558,7 +556,7 @@ proc parseOffsetTime {offset} {
 		:([[:digit:]]{2})	# field 4 - second
 	    )?
 	)?
-    } $offset -> signum hour minute second]} then {
+    } $offset -> signum hour minute second]} {
 	puts stderr "$fileName:$lno:can't parse offset time \"$offset\""
 	incr errorCount
     }
@@ -940,7 +938,7 @@ proc applyRules {ruleSet year startSecs stdGMTOffset DSTOffset nextGMTOffset
 	    if {
 		$earliestSecs > $startSecs &&
 		($until eq "" || $earliestSecs < $untilSecs)
-	    } then {
+	    } {
 		# Test if the initial transition has been done.
 		# If not, do it now.
 
@@ -989,7 +987,7 @@ proc applyRules {ruleSet year startSecs stdGMTOffset DSTOffset nextGMTOffset
 	set date [::tcl::clock::GetJulianDayFromEraYearMonthDay \
 		[dict create era CE year $year month 1 dayOfMonth 1] 2361222]
 	set startSecs [expr {
-	    [dict get $date julianDay] * wide(86400) - 210866803200 
+	    [dict get $date julianDay] * wide(86400) - 210866803200
 		- $stdGMTOffset - $DSTOffset
 	}]
 
@@ -1255,9 +1253,23 @@ proc writeZones {outDir} {
 	# Generate data for a zone
 
 	set data ""
+	set tzmapped {}
 	foreach {
 	    time offset dst name
 	} [processTimeZone $zoneName $zones($zoneName)] {
+	    if {$name eq "%z"} {
+		# map %z to pure offset zone (e. g. offset -7200 -> -0200):
+		set name [format "%+03d%02d" [expr {
+				$offset / 60 / 60
+			    }] [expr {
+				(abs($offset) / 60) % 60
+			    }]
+			]
+		if {![dict exists $tzmapped $offset]} { # output once per offs
+		    puts "\tmap %z ($offset) -> $name"
+		    dict set tzmapped $offset $name
+		}
+	    }
 	    append data "\n    " [list [list $time $offset $dst $name]]
 	}
 	append data \n
@@ -1265,7 +1277,7 @@ proc writeZones {outDir} {
 	# Write the data to the information file
 
 	set f [open $fileName w]
-	fconfigure $f -translation lf
+	fconfigure $f -translation lf -encoding utf-8
 	puts $f "\# created by $::argv0 - do not edit"
 	puts $f ""
 	puts $f [list set TZData(:$zoneName) $data]
@@ -1318,7 +1330,7 @@ proc writeLinks {outDir} {
 	# Write the file
 
 	set f [open $fileName w]
-	fconfigure $f -translation lf
+	fconfigure $f -translation lf -encoding utf-8
 	puts $f "\# created by $::argv0 - do not edit"
 	puts $f $ifCmd
 	puts $f $setCmd

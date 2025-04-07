@@ -11,8 +11,8 @@
 # See the file "license.terms" for information on usage and redistribution
 # of this file, and for a DISCLAIMER OF ALL WARRANTIES.
 
-if {[lsearch [namespace children] ::tcltest] == -1} {
-    package require tcltest 2
+if {"::tcltest" ni [namespace children]} {
+    package require tcltest 2.5
     namespace import -force ::tcltest::*
 }
 
@@ -32,12 +32,16 @@ testConstraint detroit \
 testConstraint y2038 \
     [expr {[clock format 2158894800 -format %z -timezone :America/Detroit] eq {-0400}}]
 
+if {[namespace which -command ::tcl::unsupported::timerate] ne ""} {
+    namespace import ::tcl::unsupported::timerate
+}
+
 # TEST PLAN
 
 # clock-1:
-#	[clock format] - tests of bad and empty arguments 
+#	[clock format] - tests of bad and empty arguments
 #
-# clock-2 
+# clock-2
 #	formatting of year, month and day of month
 #
 # clock-3
@@ -151,6 +155,9 @@ testConstraint y2038 \
 # clock-38
 #	Regression test to verify that changes in TZ work
 #	both east and west of Greenwich
+#
+# clock-68
+#	Leap seconds/minutes/hours
 
 
 # Note that all code between comments '# BEGIN' and '# END' is
@@ -195,7 +202,7 @@ namespace eval ::tcl::clock {
 	    l li lii liii liv lv lvi lvii lviii lix
 	    lx lxi lxii lxiii lxiv lxv lxvi lxvii lxviii lxix
 	    lxx lxxi lxxii lxxiii lxxiv lxxv lxxvi lxxvii lxxviii lxxix
-	    lxxx lxxxi lxxxii lxxxiii lxxxiv lxxxv lxxxvi lxxxvii lxxxviii 
+	    lxxx lxxxi lxxxii lxxxiii lxxxiv lxxxv lxxxvi lxxxvii lxxxviii
 	    lxxxix
 	    xc xci xcii xciii xciv xcv xcvi xcvii xcviii xcix
 	    c
@@ -271,14 +278,23 @@ test clock-1.3 "clock format - empty val" {
 test clock-1.4 "clock format - bad flag" {*}{
     -body {
     list [catch {clock format 0 -oops badflag} msg] $msg $::errorCode
-    } 
+    }
     -match glob
-    -result {1 {bad switch "-oops": must be -format, -gmt, -locale, or -timezone} {CLOCK badSwitch -oops}}
+    -result {1 {bad option "-oops": must be -format, -gmt, -locale, or -timezone} {CLOCK badOption -oops}}
 }
 
-test clock-1.5 "clock format - bad timezone" {
-    list [catch {clock format 0 -format "%s" -timezone :NOWHERE} msg] $msg $::errorCode
-} {1 {time zone ":NOWHERE" not found} {CLOCK badTimeZone :NOWHERE}}
+test clock-1.5 "clock format - bad timezone (not found)" -body {
+    clock format 0 -format "%s" -timezone :NOWHERE
+} -returnCodes 1 -result {time zone ":NOWHERE" not found} -errorCode {CLOCK badTimeZone :NOWHERE}
+foreach tz [list {*}{
+  ../UNSAFEPATH/NOWHERE UNSAFEPATH/../GMT //UNSAFEPATH/NOWHERE
+  zipfs:/UNSAFEPATH/NOWHERE C:/UNSAFEPATH/NOWHERE
+  } [list $::tcl::clock::DataDir/GMT]
+] {
+test clock-1.5.1.$tz "clock format - bad timezone (not valid - unsafe path)" -body {
+    clock format 0 -format "%s" -timezone $tz
+} -returnCodes 1 -result "time zone \":$tz\" not valid" -errorCode [list CLOCK badTimeZone :$tz]
+}
 
 test clock-1.6 "clock format - gmt + timezone" {
     list [catch {clock format 0 -timezone :GMT -gmt true} msg] $msg $::errorCode
@@ -15416,30 +15432,9 @@ test clock-5.29 {time zone boundary case 1948-09-26 01:00:01} detroit {
     clock format -671047199 -format {%H:%M:%S %z %Z} \
         -timezone :America/Detroit
 } {01:00:01 -0500 EST}
-test clock-5.30 {time zone boundary case 1967-06-14 01:59:59} detroit {
-    clock format -80499601 -format {%H:%M:%S %z %Z} \
-        -timezone :America/Detroit
-} {01:59:59 -0500 EST}
-test clock-5.31 {time zone boundary case 1967-06-14 03:00:00} detroit {
-    clock format -80499600 -format {%H:%M:%S %z %Z} \
-        -timezone :America/Detroit
-} {03:00:00 -0400 EDT}
-test clock-5.32 {time zone boundary case 1967-06-14 03:00:01} detroit {
-    clock format -80499599 -format {%H:%M:%S %z %Z} \
-        -timezone :America/Detroit
-} {03:00:01 -0400 EDT}
-test clock-5.33 {time zone boundary case 1967-10-29 01:59:59} detroit {
-    clock format -68666401 -format {%H:%M:%S %z %Z} \
-        -timezone :America/Detroit
-} {01:59:59 -0400 EDT}
-test clock-5.34 {time zone boundary case 1967-10-29 01:00:00} detroit {
-    clock format -68666400 -format {%H:%M:%S %z %Z} \
-        -timezone :America/Detroit
-} {01:00:00 -0500 EST}
-test clock-5.35 {time zone boundary case 1967-10-29 01:00:01} detroit {
-    clock format -68666399 -format {%H:%M:%S %z %Z} \
-        -timezone :America/Detroit
-} {01:00:01 -0500 EST}
+
+# Detroit did not observe Daylight Saving Time in 1967
+
 test clock-5.36 {time zone boundary case 1972-12-31 23:59:59} detroit {
     clock format 94712399 -format {%H:%M:%S %z %Z} \
         -timezone :America/Detroit
@@ -18616,6 +18611,20 @@ test clock-7.8 {Julian Day, precedence below seconds} {
 test clock-7.9 {Julian Day, two values} {
     clock scan {2440588 2440589} -format {%J %J} -gmt true
 } 86400
+
+test clock-7.10 {Julian Day, negative amount} {
+    # Note: %J does not accept negative input;
+    # add negative amounts to Julian day 0 instead
+    set s0 [clock scan 0 -format %J -gmt true]
+    set J0 [scan [clock format $s0 -format %J -gmt true] %lld]
+    set s0m1d [clock add $s0 -1 days -timezone :UTC]
+    set s0m24h [clock add $s0 -24 hours -timezone :UTC]
+    set J0m24h [scan [clock format $s0m24h -format %J -gmt true] %lld]
+    set s0m1s [clock add $s0 -1 seconds -timezone :UTC]
+    set J0m1s [scan [clock format $s0m1s -format %J -gmt true] %lld]
+    list $s0m1d $s0m24h $J0m24h $s0m1s $J0m1s $s0 $J0 \
+	[::tcl::mathop::== $s0m1d $s0m24h] [::tcl::mathop::== $J0m24h $J0m1s]
+} [list -210866889600 -210866889600 -1 -210866803201 -1 -210866803200 0 1 1]
 
 # BEGIN testcases8
 
@@ -35045,6 +35054,24 @@ test clock-30.8 {clock add months, negative} {
     set x4 [clock format $f4 -format %Y-%m-%d -timezone :UTC]
     list $x1 $x2 $x3 $x4
 } {2000-02-29 2000-01-31 1999-12-31 1999-11-30}
+test clock-30.8a {clock add months, negative, over threshold of a year} {
+    set t [clock scan 2019-01-31 -format %Y-%m-%d -gmt 1]
+    list [clock format [clock add $t -1 month -gmt 1] -format %Y-%m-%d -gmt 1] \
+	 [clock format [clock add $t -2 month -gmt 1] -format %Y-%m-%d -gmt 1] \
+	 [clock format [clock add $t -3 month -gmt 1] -format %Y-%m-%d -gmt 1] \
+	 [clock format [clock add $t -4 month -gmt 1] -format %Y-%m-%d -gmt 1]
+} {2018-12-31 2018-11-30 2018-10-31 2018-09-30}
+test clock-30.8b {clock add months, negative, over threshold of a year} {
+    set t [clock scan 2000-01-28 -format %Y-%m-%d -gmt 1]
+    for {set i 1} {$i < 24} {incr i 1} {
+	set f1 [clock add $t -$i month -gmt 1]
+	set f2 [clock add $f1 $i month -gmt 1]
+	if {$f2 != $t} {
+	    error "\[clock add $t -$i month -gmt 1\] does not consider\
+		   \[clock add $f1 $i month -gmt 1\] != $t"
+	}
+    }
+} {}
 test clock-30.9 {clock add days} {
     set t [clock scan {2000-01-01 12:34:56} -format {%Y-%m-%d %H:%M:%S} \
 	       -timezone :UTC]
@@ -35221,7 +35248,7 @@ test clock-30.25 {clock add seconds at DST conversion} {
 
 test clock-31.1 {system locale} \
     -constraints win \
-    -setup { 
+    -setup {
 	namespace eval ::tcl::clock {
 	    namespace import -force ::testClock::registry
 	}
@@ -35244,7 +35271,7 @@ test clock-31.1 {system locale} \
 
 test clock-31.2 {system locale} \
     -constraints win \
-    -setup { 
+    -setup {
 	namespace eval ::tcl::clock {
 	    namespace import -force ::testClock::registry
 	}
@@ -35267,7 +35294,7 @@ test clock-31.2 {system locale} \
 
 test clock-31.3 {system locale} \
     -constraints win \
-    -setup { 
+    -setup {
 	namespace eval ::tcl::clock {
 	    namespace import -force ::testClock::registry
 	}
@@ -35290,7 +35317,7 @@ test clock-31.3 {system locale} \
 
 test clock-31.4 {system locale} \
     -constraints win \
-    -setup { 
+    -setup {
 	namespace eval ::tcl::clock {
 	    namespace import -force ::testClock::registry
 	}
@@ -35327,7 +35354,7 @@ test clock-31.4 {system locale} \
 
 test clock-31.5 {system locale} \
     -constraints win \
-    -setup { 
+    -setup {
 	namespace eval ::tcl::clock {
 	    namespace import -force ::testClock::registry
 	}
@@ -35364,7 +35391,7 @@ test clock-31.5 {system locale} \
 
 test clock-31.6 {system locale} \
     -constraints win \
-    -setup { 
+    -setup {
 	namespace eval ::tcl::clock {
 	    namespace import -force ::testClock::registry
 	}
@@ -35434,25 +35461,25 @@ test clock-32.1 {scan/format across the Gregorian change} {
     }
     set problems
 } {}
-			 
+
 # Legacy tests
 
 # clock clicks
 test clock-33.1 {clock clicks tests} {
-    expr [clock clicks]+1
+    expr {[clock clicks] + 1}
     concat {}
 } {}
 test clock-33.2 {clock clicks tests} {
     set start [clock clicks]
     after 10
     set end [clock clicks]
-    expr "$end > $start"
+    expr {$end > $start}
 } {1}
 test clock-33.3 {clock clicks tests} {
     list [catch {clock clicks foo} msg] $msg
 } {1 {bad option "foo": must be -milliseconds or -microseconds}}
 test clock-33.4 {clock clicks tests} {
-    expr [clock clicks -milliseconds]+1
+    expr {[clock clicks -milliseconds] + 1}
     concat {}
 } {}
 test clock-33.4a {clock milliseconds} {
@@ -35462,25 +35489,33 @@ test clock-33.4a {clock milliseconds} {
 test clock-33.5 {clock clicks tests, millisecond timing test} {
     # This test can fail on a system that is so heavily loaded that
     # the test takes >60 ms to run.
-    set start [clock clicks -milli]
-    after 10
-    set end [clock clicks -milli]
+    if {[lindex [timerate {
+	set start [clock clicks -milli]
+	timerate {} 10; # short but precise busy wait
+	set end [clock clicks -milli]
+    } 1 1] 0] > 60000} {
+	::tcltest::Skip "timing issue"
+    }
     # 60 msecs seems to be the max time slice under Windows 95/98
     expr {
 	  ($end > $start) && (($end - $start) <= 60) ?
-	  "ok" : 
+	  "ok" :
 	  "test should have taken 0-60 ms, actually took [expr $end - $start]"}
 } {ok}
 test clock-33.5a {clock tests, millisecond timing test} {
     # This test can fail on a system that is so heavily loaded that
     # the test takes >60 ms to run.
-    set start [clock milliseconds]
-    after 10
-    set end [clock milliseconds]
+    if {[lindex [timerate {
+	set start [clock milliseconds]
+	timerate {} 10; # short but precise busy wait
+	set end [clock milliseconds]
+    } 1 1] 0] > 60000} {
+	::tcltest::Skip "timing issue"
+    }
     # 60 msecs seems to be the max time slice under Windows 95/98
     expr {
 	  ($end > $start) && (($end - $start) <= 60) ?
-	  "ok" : 
+	  "ok" :
 	  "test should have taken 0-60 ms, actually took [expr $end - $start]"}
 } {ok}
 test clock-33.6 {clock clicks, milli with too much abbreviation} {
@@ -35493,17 +35528,25 @@ test clock-33.7 {clock clicks, milli with too much abbreviation} {
 test clock-33.8 {clock clicks test, microsecond timing test} {
     # This test can fail on a system that is so heavily loaded that
     # the test takes >60 ms to run.
-    set start [clock clicks -micro]
-    after 10
-    set end [clock clicks -micro]
+    if {[lindex [timerate {
+	set start [clock clicks -micro]
+	timerate {} 10; # short but precise busy wait
+	set end [clock clicks -micro]
+    } 1 1] 0] > 60000} {
+	::tcltest::Skip "timing issue"
+    }
     expr {($end > $start) && (($end - $start) <= 60000)}
 } {1}
 test clock-33.8a {clock test, microsecond timing test} {
     # This test can fail on a system that is so heavily loaded that
     # the test takes >60 ms to run.
-    set start [clock microseconds]
-    after 10
-    set end [clock microseconds]
+    if {[lindex [timerate {
+	set start [clock microseconds]
+	timerate {} 10; # short but precise busy wait
+	set end [clock microseconds]
+    } 1 1] 0] > 60000} {
+	::tcltest::Skip "timing issue"
+    }
     expr {($end > $start) && (($end - $start) <= 60000)}
 } {1}
 
@@ -35607,7 +35650,7 @@ test clock-34.8 {clock scan tests} {
 } {Oct 23,1992 15:00 GMT}
 test clock-34.9 {clock scan tests} {
     list [catch {clock scan "Jan 12" -bad arg} msg] $msg
-} {1 {bad switch "-bad", must be -base, -format, -gmt, -locale or -timezone}}
+} {1 {bad option "-bad", must be -base, -format, -gmt, -locale or -timezone}}
 # The following two two tests test the two year date policy
 test clock-34.10 {clock scan tests} {
     set time [clock scan "1/1/71" -gmt true]
@@ -35617,7 +35660,6 @@ test clock-34.11 {clock scan tests} {
     set time [clock scan "1/1/37" -gmt true]
     clock format $time -format {%b %d,%Y %H:%M GMT} -gmt true
 } {Jan 01,2037 00:00 GMT}
-
 test clock-34.12 {clock scan, relative times} {
     set time [clock scan "Oct 23, 1992 -1 day"]
     clock format $time -format {%b %d, %Y}
@@ -35769,7 +35811,6 @@ test clock-34.43 {last monday in november} {
     }
     set res
 } {1991-11-25 1992-11-30 1993-11-29 1994-11-28 1995-11-27 1996-11-25}
-
 test clock-34.44 {2nd monday in november} {
     set res {}
     foreach i {91 92 93 94 95 96} {
@@ -35802,42 +35843,99 @@ test clock-34.47 {ago with multiple relative units} {
     set res [clock scan "2 days 2 hours ago" -base $base]
     expr {$base - $res}
 } 180000
-
 test clock-34.48 {more than one ToD} {*}{
-    -body {clock scan {10:00 11:00}} 
+    -body {clock scan {10:00 11:00}}
     -returnCodes error
     -result {unable to convert date-time string "10:00 11:00": more than one time of day in string}
 }
-
 test clock-34.49 {more than one date} {*}{
-    -body {clock scan {1/1/2001 2/2/2002}} 
+    -body {clock scan {1/1/2001 2/2/2002}}
     -returnCodes error
     -result {unable to convert date-time string "1/1/2001 2/2/2002": more than one date in string}
 }
-
 test clock-34.50 {more than one time zone} {*}{
-    -body {clock scan {10:00 EST CST}} 
+    -body {clock scan {10:00 EST CST}}
     -returnCodes error
     -result {unable to convert date-time string "10:00 EST CST": more than one time zone in string}
 }
-
 test clock-34.51 {more than one weekday} {*}{
-    -body {clock scan {Monday Tuesday}} 
+    -body {clock scan {Monday Tuesday}}
     -returnCodes error
     -result {unable to convert date-time string "Monday Tuesday": more than one weekday in string}
 }
-
 test clock-34.52 {more than one ordinal month} {*}{
-    -body {clock scan {next January next March}} 
+    -body {clock scan {next January next March}}
     -returnCodes error
     -result {unable to convert date-time string "next January next March": more than one ordinal month in string}
 }
-
-
+test clock-34.53 {clock scan, ISO 8601 point in time format} {
+    set time [clock scan "19921023T00:00:00"]
+    clock format $time -format {%b %d, %Y %H:%M:%S}
+} "Oct 23, 1992 00:00:00"
+test clock-34.54 {clock scan, ISO 8601 point in time format} {
+    set time [clock scan "1992-10-23T00:00:00"]
+    clock format $time -format {%b %d, %Y %H:%M:%S}
+} "Oct 23, 1992 00:00:00"
+test clock-34.55 {clock scan, ISO 8601 invalid TZ} -body {
+    set time [clock scan "19921023MST000000"]
+    clock format $time -format {%b %d, %Y %H:%M:%S}
+} -returnCodes error -match glob -result {unable to convert date-time string*}
+test clock-34.56 {clock scan, ISO 8601 invalid TZ} -body {
+    set time [clock scan "19921023M000000"]
+    clock format $time -format {%b %d, %Y %H:%M:%S}
+} -returnCodes error -match glob -result {unable to convert date-time string*}
+test clock-34.57 {clock scan, ISO 8601 invalid TZ} -body {
+    set time [clock scan "1992-10-23M00:00:00"]
+    clock format $time -format {%b %d, %Y %H:%M:%S}
+} -returnCodes error -match glob -result {unable to convert date-time string*}
+test clock-34.58 {clock scan, ISO 8601 invalid TZ} -body {
+    set time [clock scan "1992-10-23MST00:00:00"]
+    clock format $time -format {%b %d, %Y %H:%M:%S}
+} -returnCodes error -match glob -result {unable to convert date-time string*}
+test clock-34.59 {clock scan tests (-TZ)} {
+    set time [clock scan "31 Jan 14 23:59:59 -0100"]
+    clock format $time -format {%b %d,%Y %H:%M:%S %Z} -gmt true
+} {Feb 01,2014 00:59:59 GMT}
+test clock-34.60 {clock scan tests (+TZ)} {
+    set time [clock scan "31 Jan 14 23:59:59 +0100"]
+    clock format $time -format {%b %d,%Y %H:%M:%S %Z} -gmt true
+} {Jan 31,2014 22:59:59 GMT}
+test clock-34.61 {clock scan tests (-TZ)} {
+    set time [clock scan "23:59:59 -0100" -base 0 -gmt true]
+    clock format $time -format {%b %d,%Y %H:%M:%S %Z} -gmt true
+} {Jan 02,1970 00:59:59 GMT}
+test clock-34.62 {clock scan tests (+TZ)} {
+    set time [clock scan "23:59:59 +0100" -base 0 -gmt true]
+    clock format $time -format {%b %d,%Y %H:%M:%S %Z} -gmt true
+} {Jan 01,1970 22:59:59 GMT}
+test clock-34.63 {clock scan tests (TZ)} {
+    set time [clock scan "Mon, 30 Jun 2014 23:59:59 CEST"]
+    clock format $time -format {%b %d,%Y %H:%M:%S %Z} -gmt true
+} {Jun 30,2014 21:59:59 GMT}
+test clock-34.64 {clock scan tests (TZ)} {
+    set time [clock scan "Fri, 31 Jan 2014 23:59:59 CET"]
+    clock format $time -format {%b %d,%Y %H:%M:%S %Z} -gmt true
+} {Jan 31,2014 22:59:59 GMT}
+test clock-34.65 {clock scan tests (relspec, day unit not TZ)} {
+    set time [clock scan "23:59:59 +15 day" -base 2000000 -gmt true]
+    clock format $time -format {%b %d,%Y %H:%M:%S %Z} -gmt true
+} {Feb 08,1970 23:59:59 GMT}
+test clock-34.66 {clock scan tests (relspec, day unit not TZ)} {
+    set time [clock scan "23:59:59 -15 day" -base 2000000 -gmt true]
+    clock format $time -format {%b %d,%Y %H:%M:%S %Z} -gmt true
+} {Jan 09,1970 23:59:59 GMT}
+test clock-34.67 {clock scan tests (merid and TZ)} {
+    set time [clock scan "10:59 pm CET" -base 2000000 -gmt true]
+    clock format $time -format {%b %d,%Y %H:%M:%S %Z} -gmt true
+} {Jan 24,1970 21:59:00 GMT}
+test clock-34.68 {clock scan tests (merid and TZ)} {
+    set time [clock scan "10:59 pm +0100" -base 2000000 -gmt true]
+    clock format $time -format {%b %d,%Y %H:%M:%S %Z} -gmt true
+} {Jan 24,1970 21:59:00 GMT}
 
 # clock seconds
 test clock-35.1 {clock seconds tests} {
-    expr [clock seconds]+1
+    expr {[clock seconds] + 1}
     concat {}
 } {}
 test clock-35.2 {clock seconds tests} {
@@ -35847,7 +35945,7 @@ test clock-35.3 {clock seconds tests} {
     set start [clock seconds]
     after 2000
     set end [clock seconds]
-    expr "$end > $start"
+    expr {$end > $start}
 } {1}
 
 
@@ -35924,7 +36022,7 @@ test clock-38.2 {make sure TZ is not cached after unset} \
         }
     } \
     -result 1
-        
+
 
 test clock-39.1 {regression - synonym timezones} {
     clock format 0 -format {%H:%M:%S} -timezone :US/Eastern
@@ -35975,7 +36073,7 @@ test clock-42.1 {regression test - %z in :localtime when west of Greenwich } \
     } \
     -result {-0500}
 
-# 43.1 was a bad test - mktime returning -1 is an error according to posix.
+# 43.1 was a bad test - mktime returning -1 is an error according to Posix.
 
 test clock-44.1 {regression test - time zone name containing hyphen } \
     -setup {
@@ -35996,12 +36094,19 @@ test clock-44.1 {regression test - time zone name containing hyphen } \
 	}
     } \
     -result {12:34:56-0500}
-    
-test clock-45.1 {regression test - time zone containing only two digits} \
+
+test clock-44.2 {regression test - time zone containing only two digits} \
     -body {
 	clock scan 1985-04-12T10:15:30+04 -format %Y-%m-%dT%H:%M:%S%Z
     } \
     -result 482134530
+
+test clock-44.3 {regression test - spaces between some scan tokens are optional} \
+    -body {
+	list [clock scan {9 Apr 2024} -format {%d %b%Y} -gmt 1] \
+	     [clock scan {Tue, 9 Apr 2024 00:00:00 +0000} -format {%a, %d %b%Y %H:%M:%S %Z} -gmt 1]
+    } \
+    -result {1712620800 1712620800}
 
 test clock-46.1 {regression test - month zero} \
     -body {
@@ -36019,6 +36124,25 @@ test clock-46.4 {regression test - month thirteen} \
     -body {
 	clock scan 20041301
     } -result [clock scan 2005-01-01 -format %Y-%m-%d]
+
+test clock-46.5 {regression test - good time} \
+    -body {
+	# 12:01 apm are valid input strings...
+	list [clock scan "12:01 am" -base 0 -gmt 1] \
+	     [clock scan "12:01 pm" -base 0 -gmt 1]
+    } -result {60 43260}
+test clock-46.6 {freescan: regression test - bad time} \
+    -body {
+	# 13:00 am/pm are invalid input strings...
+	list [clock scan "13:00 am" -base 0 -gmt 1] \
+	     [clock scan "13:00 pm" -base 0 -gmt 1]
+    } -result {3600 46800}
+
+test clock-46.7 {regression test - switch day by large not-valid time, see bug [3ee8f1c2a785f4d8]} {
+    list [clock scan 23:59:59 -base 0 -gmt 1 -format %H:%M:%S] \
+	 [clock scan 24:00:00 -base 0 -gmt 1 -format %H:%M:%S] \
+	 [clock scan 48:00:00 -base 0 -gmt 1 -format %H:%M:%S]
+} {86399 86400 172800}
 
 test clock-47.1 {regression test - four-digit time} {
     clock scan 0012
@@ -36041,7 +36165,7 @@ test clock-48.1 {Bug 1185933: 'i' destroyed by clock init} -setup {
 
 test clock-49.1 {regression test - localtime with negative arg (Bug 1237907)} \
     -body {
-	list [catch { 
+	list [catch {
 	    clock format -86400 -timezone :localtime -format %Y
 	} result] $result
     } \
@@ -36280,7 +36404,7 @@ test clock-56.1 {use of zoneinfo, version 1} {*}{
     }
     -result {2004-01-01 00:00:00 MST}
 }
-	    
+
 test clock-56.2 {use of zoneinfo, version 2} {*}{
     -setup {
 	clock format [clock seconds]
@@ -36330,7 +36454,7 @@ test clock-56.2 {use of zoneinfo, version 2} {*}{
 	removeFile PhoenixTwo $tzdir2
 	removeDirectory Test $tzdir
 	removeDirectory zoneinfo
-    } 
+    }
     -body {
 	clock format 1072940400 -timezone :Test/PhoenixTwo \
 	    -format {%Y-%m-%d %H:%M:%S %Z}
@@ -36540,7 +36664,7 @@ test clock-56.3 {use of zoneinfo, version 2, Y2038 compliance} {*}{
 	removeFile TijuanaTwo $tzdir2
 	removeDirectory Test $tzdir
 	removeDirectory zoneinfo
-    } 
+    }
     -body {
 	clock format 2224738800 -timezone :Test/TijuanaTwo \
 	    -format {%Y-%m-%d %H:%M:%S %Z}
@@ -36692,7 +36816,7 @@ test clock-56.4 {Bug 3470928} {*}{
 	removeFile Windhoek $tzdir2
 	removeDirectory Test $tzdir
 	removeDirectory zoneinfo
-    } 
+    }
     -result {Sun Jan 08 22:30:06 WAST 2012}
 }
 
@@ -36700,10 +36824,18 @@ test clock-57.1 {clock scan - abbreviated options} {
     clock scan 1970-01-01 -f %Y-%m-%d -g true
 } 0
 
+test clock-57.2 {clock scan - not -gmt and -timezone in the same call} {
+    catch {clock scan 1970-01-01 -format %Y-%m-%d -gmt true -timezone :Europe/Berlin}
+} 1
+
+test clock-57.3 {clock scan - not -g and -timezone in the same call} {
+    catch {clock scan 1970-01-01 -format %Y-%m-%d -g true -timezone :Europe/Berlin}
+} 1
+
 test clock-58.1 {clock l10n - Japanese localisation} {*}{
     -setup {
 	proc backslashify { string } {
-	    
+
 	    set retval {}
 	    foreach char [split $string {}] {
 		scan $char %c ccode
@@ -36720,16 +36852,18 @@ test clock-58.1 {clock l10n - Japanese localisation} {*}{
     }
     -body {
 	set trouble {}
-	foreach {date jdate} [list \
-	    1872-12-31 \u897f\u66a61872\u5e7412\u670831\u65e5 \
-	    1873-01-01 \u660e\u6cbb06\u5e7401\u670801\u65e5 \
-	    1912-07-29 \u660e\u6cbb45\u5e7407\u670829\u65e5 \
-	    1912-07-30 \u5927\u6b6301\u5e7407\u670830\u65e5 \
-	    1926-12-24 \u5927\u6b6315\u5e7412\u670824\u65e5 \
-	    1926-12-25 \u662d\u548c01\u5e7412\u670825\u65e5 \
-	    1989-01-07 \u662d\u548c64\u5e7401\u670807\u65e5 \
-	    1989-01-08 \u5e73\u621001\u5e7401\u670808\u65e5 \
-	] {
+	foreach {date jdate} {
+	    1872-12-31 \u897f\u66a61872\u5e7412\u670831\u65e5
+	    1873-01-01 \u660e\u6cbb06\u5e7401\u670801\u65e5
+	    1912-07-29 \u660e\u6cbb45\u5e7407\u670829\u65e5
+	    1912-07-30 \u5927\u6b6301\u5e7407\u670830\u65e5
+	    1926-12-24 \u5927\u6b6315\u5e7412\u670824\u65e5
+	    1926-12-25 \u662d\u548c01\u5e7412\u670825\u65e5
+	    1989-01-07 \u662d\u548c64\u5e7401\u670807\u65e5
+	    1989-01-08 \u5e73\u621001\u5e7401\u670808\u65e5
+	    2019-04-30 \u5e73\u621031\u5e7404\u670830\u65e5
+	    2019-05-01 \u4ee4\u548c01\u5e7405\u670801\u65e5
+	} {
 	    set status [catch {
 		set secs [clock scan $date \
 			      -timezone +0900 \
@@ -36805,56 +36939,73 @@ test clock-59.1 {military time zones} {
     join $trouble \n
 } {}
 
+test clock-59.2 {correct time zone names, format and scan back, bug and regression [2c237beffbace823]} {
+    set result {}
+    foreach {base tz} {
+	 1700000000 "Etc/GMT-2"
+	 1700000000 "Etc/GMT+2"
+	 1301184000 "Europe/Kaliningrad"
+	  152632800 "Pacific/Chatham"
+	 -765317964 "America/Paramaribo"
+	-2337928528 "Australia/Eucla"
+    } {
+	set v [clock format $base -timezone Etc/GMT-2 -format "%Y-%m-%d %H:%M:%S %Z"]
+	lappend result [expr {[set t [clock scan $v -format "%Y-%m-%d %H:%M:%S %Z"]] == $base ? 1 : "0 ($t != $base for $v)"}]
+	lappend result [expr {[set t [clock scan $v]] == $base ? 1 : "0 ($t != $base for $v)"}]
+    }
+    set result
+} [lrepeat 12 1]
+
 # case-insensitive matching of weekday and month names [Bug 1781282]
 
 test clock-60.1 {case insensitive weekday names} {
     clock scan "2000-W01 monday" -gmt true -format "%G-W%V %a"
-} [clock scan "2000-W01-1" -gmt true -format "%G-W%V-%u"] 
+} [clock scan "2000-W01-1" -gmt true -format "%G-W%V-%u"]
 test clock-60.2 {case insensitive weekday names} {
     clock scan "2000-W01 Monday" -gmt true -format "%G-W%V %a"
-} [clock scan "2000-W01-1" -gmt true -format "%G-W%V-%u"] 
+} [clock scan "2000-W01-1" -gmt true -format "%G-W%V-%u"]
 test clock-60.3 {case insensitive weekday names} {
     clock scan "2000-W01 MONDAY" -gmt true -format "%G-W%V %a"
-} [clock scan "2000-W01-1" -gmt true -format "%G-W%V-%u"] 
+} [clock scan "2000-W01-1" -gmt true -format "%G-W%V-%u"]
 test clock-60.4 {case insensitive weekday names} {
     clock scan "2000-W01 friday" -gmt true -format "%G-W%V %a"
-} [clock scan "2000-W01-5" -gmt true -format "%G-W%V-%u"] 
+} [clock scan "2000-W01-5" -gmt true -format "%G-W%V-%u"]
 test clock-60.5 {case insensitive weekday names} {
     clock scan "2000-W01 Friday" -gmt true -format "%G-W%V %a"
-} [clock scan "2000-W01-5" -gmt true -format "%G-W%V-%u"] 
+} [clock scan "2000-W01-5" -gmt true -format "%G-W%V-%u"]
 test clock-60.6 {case insensitive weekday names} {
     clock scan "2000-W01 FRIDAY" -gmt true -format "%G-W%V %a"
-} [clock scan "2000-W01-5" -gmt true -format "%G-W%V-%u"] 
+} [clock scan "2000-W01-5" -gmt true -format "%G-W%V-%u"]
 test clock-60.7 {case insensitive month names} {
     clock scan "1 january 2000" -gmt true -format "%d %b %Y"
-} [clock scan "2000-01-01" -gmt true -format "%Y-%m-%d"] 
+} [clock scan "2000-01-01" -gmt true -format "%Y-%m-%d"]
 test clock-60.8 {case insensitive month names} {
     clock scan "1 January 2000" -gmt true -format "%d %b %Y"
-} [clock scan "2000-01-01" -gmt true -format "%Y-%m-%d"] 
+} [clock scan "2000-01-01" -gmt true -format "%Y-%m-%d"]
 test clock-60.9 {case insensitive month names} {
     clock scan "1 JANUARY 2000" -gmt true -format "%d %b %Y"
-} [clock scan "2000-01-01" -gmt true -format "%Y-%m-%d"] 
+} [clock scan "2000-01-01" -gmt true -format "%Y-%m-%d"]
 test clock-60.10 {case insensitive month names} {
     clock scan "1 december 2000" -gmt true -format "%d %b %Y"
-} [clock scan "2000-12-01" -gmt true -format "%Y-%m-%d"] 
+} [clock scan "2000-12-01" -gmt true -format "%Y-%m-%d"]
 test clock-60.11 {case insensitive month names} {
     clock scan "1 December 2000" -gmt true -format "%d %b %Y"
-} [clock scan "2000-12-01" -gmt true -format "%Y-%m-%d"] 
+} [clock scan "2000-12-01" -gmt true -format "%Y-%m-%d"]
 test clock-60.12 {case insensitive month names} {
     clock scan "1 DECEMBER 2000" -gmt true -format "%d %b %Y"
-} [clock scan "2000-12-01" -gmt true -format "%Y-%m-%d"] 
+} [clock scan "2000-12-01" -gmt true -format "%Y-%m-%d"]
 
 test clock-61.1 {overflow of a wide integer on output} {*}{
     -body {
 	clock format 0x8000000000000000 -format %s -gmt true
-    } 
+    }
     -result {integer value too large to represent}
     -returnCodes error
 }
 test clock-61.2 {overflow of a wide integer on output} {*}{
     -body {
 	clock format -0x8000000000000001 -format %s -gmt true
-    } 
+    }
     -result {integer value too large to represent}
     -returnCodes error
 }
@@ -36905,9 +37056,18 @@ test clock-65.1 {clock add, bad option [Bug 2481670]} {*}{
     -body {
 	clock add 0 1 year -foo bar
     }
-    -returnCodes error
     -match glob
-    -result {bad switch "-foo"*}
+    -returnCodes error
+    -result {bad option "-foo"*}
+}
+
+test clock-65.2 {clock add with both -timezone and -gmt} {*}{
+    -body {
+	clock add 0 1 year -timezone :CET -gmt true
+    }
+    -match glob
+    -returnCodes error
+    -result {cannot use -gmt and -timezone in same call}
 }
 
 test clock-66.1 {clock scan, no date, never-before-seen timezone} {*}{
@@ -36935,6 +37095,53 @@ test clock-67.3 {Bug d19a30db57} -body {
     # error, not segfault
     tcl::clock::GetJulianDayFromEraYearWeekDay {} 2361222
 } -returnCodes error -match glob -result *
+test clock-67.4 {Change format %x output on global locale change [Bug 4a0c163d24]} -setup {
+    package require msgcat
+    set current [msgcat::mclocale]
+} -body {
+    msgcat::mclocale de_de
+    set res [regexp {^\d{2}\.\d{2}\.\d{4}$} [clock format 1 -locale current -format %x]]
+    msgcat::mclocale en_uk
+    lappend res [regexp {^\d{2}/\d{2}/\d{4}$} [clock format 1 -locale current -format %x]]
+} -cleanup {
+    msgcat::mclocale $current
+} -result {1 1}
+test clock-67.5 {Change scan %x output on global locale change [Bug 4a0c163d24]} -setup {
+    package require msgcat
+    set current [msgcat::mclocale]
+} -body {
+    msgcat::mclocale de_de
+    set res [clock scan "01.01.1970" -locale current -format %x -gmt 1]
+    msgcat::mclocale en_uk
+    # This will fail without the bug fix, as still de_de is active
+    expr {$res == [clock scan "01/01/1970" -locale current -format %x -gmt 1]}
+} -cleanup {
+    msgcat::mclocale $current
+} -result {1}
+
+test clock-68.1 {Leap second, minute, hour [f2b5f89c0d], regression test (no validity check)} -body {
+    set res {}
+    foreach {d i} {
+	"2012-06-30 23:59:60" 1341100800
+	"2012-06-30 23:60:00" 1341100800
+	"2012-06-30 24:00:00" 1341100800
+	"2012-06-29 23:59:60" 1341014400
+	"2012-05-30 23:59:60" 1338422400
+	"2012-05-30 23:60:60" 1338422460
+	"2012-05-30 24:00:60" 1338422460
+	"2012-05-30 24:60:00" 1338426000
+    } {
+	# check with free scan:
+	if {[set t [clock scan $d -gmt 1]] != $i} {
+	    lappend res "free-scan \"$d\" == $t, expected $i"
+	}
+	# check with formatted scan:
+	if {[set t [clock scan $d -gmt 1 -format "%Y-%m-%d %H:%M:%S"]] != $i} {
+	    lappend res "fmt-scan \"$d\" == $t, expected $i"
+	}
+    }
+    set res; # must be empty
+} -result {}
 
 # cleanup
 

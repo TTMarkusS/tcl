@@ -4,8 +4,8 @@
 # strings. This file is primarily needed so Tk text and entry widgets behave
 # properly for different platforms.
 #
-# Copyright (c) 1996 by Sun Microsystems, Inc.
-# Copyright (c) 1998 by Scritpics Corporation.
+# Copyright (c) 1996 Sun Microsystems, Inc.
+# Copyright (c) 1998 Scriptics Corporation.
 #
 # See the file "license.terms" for information on usage and redistribution
 # of this file, and for a DISCLAIMER OF ALL WARRANTIES.
@@ -14,13 +14,21 @@
 # interpreted as white space.
 
 if {$::tcl_platform(platform) eq "windows"} {
-    # Windows style - any but a unicode space char
-    set ::tcl_wordchars {\S}
-    set ::tcl_nonwordchars {\s}
+    # Windows style - any but a Unicode space char
+    if {![info exists ::tcl_wordchars]} {
+	set ::tcl_wordchars {\S}
+    }
+    if {![info exists ::tcl_nonwordchars]} {
+	set ::tcl_nonwordchars {\s}
+    }
 } else {
-    # Motif style - any unicode word char (number, letter, or underscore)
-    set ::tcl_wordchars {\w}
-    set ::tcl_nonwordchars {\W}
+    # Motif style - any Unicode word char (number, letter, or underscore)
+    if {![info exists ::tcl_wordchars]} {
+	set ::tcl_wordchars {\w}
+    }
+    if {![info exists ::tcl_nonwordchars]} {
+	set ::tcl_nonwordchars {\W}
+    }
 }
 
 # Arrange for caches of the real matcher REs to be kept, which enables the REs
@@ -138,7 +146,9 @@ proc tcl_startOfNextWord {str start} {
 proc tcl_startOfPreviousWord {str start} {
     variable ::tcl::WordBreakRE
     set word {-1 -1}
-    regexp -indices -- $WordBreakRE(previous) [string range $str 0 $start-1] \
-	    result word
+    if {$start > 0} {
+	regexp -indices -- $WordBreakRE(previous) [string range [string range $str 0 $start] 0 end-1] \
+		result word
+    }
     return [lindex $word 0]
 }

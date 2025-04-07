@@ -56,8 +56,8 @@ set(BUILD_STATIC_LIBS ON)
 
 # version numbers
 SET(TCL_VERSION_MAJOR 8)
-SET(TCL_VERSION_MINOR 5)
-SET(TCL_VERSION_PATCH 19)
+SET(TCL_VERSION_MINOR 6)
+SET(TCL_VERSION_PATCH 16)
 
 SET(TCL_VERSION "${TCL_VERSION_MAJOR}.${TCL_VERSION_MINOR}.${TCL_VERSION_PATCH}")
 SET(TCL_WIN_VERSION "${TCL_VERSION_MAJOR}.${TCL_VERSION_MINOR}.${TCL_VERSION_PATCH}")
@@ -697,6 +697,11 @@ ELSE(${TCL_TIMEZONE_DATA} STREQUAL "AUTO")
 ENDIF(${TCL_TIMEZONE_DATA} STREQUAL "AUTO")
 
 #--------------------------------------------------------------------
+#       Check for zlib support
+#--------------------------------------------------------------------
+find_package(zlib CONFIG REQUIRED)
+
+#--------------------------------------------------------------------
 #       DTrace support
 #--------------------------------------------------------------------
 # TODO
@@ -761,10 +766,11 @@ ADD_SUBDIRECTORY(library)
 
 SET(TCL_GENERIC_SRCS
   generic/regcomp.c
+  generic/regerror.c
   generic/regexec.c
   generic/regfree.c
-  generic/regerror.c
   generic/tclAlloc.c
+  generic/tclAssembly.c
   generic/tclAsync.c
   generic/tclBasic.c
   generic/tclBinary.c
@@ -774,12 +780,16 @@ SET(TCL_GENERIC_SRCS
   generic/tclCmdIL.c
   generic/tclCmdMZ.c
   generic/tclCompCmds.c
+  generic/tclCompCmdsGR.c
+  generic/tclCompCmdsSZ.c
   generic/tclCompExpr.c
   generic/tclCompile.c
   generic/tclConfig.c
   generic/tclDate.c
   generic/tclDictObj.c
+  generic/tclDisassemble.c
   generic/tclEncoding.c
+  generic/tclEnsemble.c
   generic/tclEnv.c
   generic/tclEvent.c
   generic/tclExecute.c
@@ -796,6 +806,7 @@ SET(TCL_GENERIC_SRCS
   generic/tclIOSock.c
   generic/tclIOUtil.c
   generic/tclIORChan.c
+  generic/tclIORTrans.c
   generic/tclLink.c
   generic/tclListObj.c
   generic/tclLiteral.c
@@ -803,7 +814,15 @@ SET(TCL_GENERIC_SRCS
   generic/tclMain.c
   generic/tclNamesp.c
   generic/tclNotify.c
+  generic/tclOO.c
+  generic/tclOOBasic.c
+  generic/tclOOCall.c
+  generic/tclOODefineCmds.c
+  generic/tclOOInfo.c
+  generic/tclOOMethod.c
+  generic/tclOOStubInit.c
   generic/tclObj.c
+  generic/tclOptimize.c
   generic/tclPanic.c
   generic/tclParse.c
   generic/tclPathObj.c
@@ -817,23 +836,20 @@ SET(TCL_GENERIC_SRCS
   generic/tclResolve.c
   generic/tclResult.c
   generic/tclScan.c
-  generic/tclStubInit.c
   generic/tclStringObj.c
   generic/tclStrToD.c
-  generic/tclTest.c
-  generic/tclTestObj.c
-  generic/tclTestProcBodyObj.c
+  generic/tclStubInit.c
   generic/tclThread.c
   generic/tclThreadAlloc.c
   generic/tclThreadJoin.c
   generic/tclThreadStorage.c
-  generic/tclThreadTest.c
   generic/tclTimer.c
+  generic/tclTomMathInterface.c
   generic/tclTrace.c
   generic/tclUtf.c
   generic/tclUtil.c
   generic/tclVar.c
-  generic/tclUniData.c
+  generic/tclZlib.c
   )
 
 IF(TCL_TOMMATH)
@@ -857,8 +873,6 @@ SET(TCL_STUB_SRCS
   )
 
 SET(TCL_TOMMATH_SRCS
-  libtommath/bn_fast_s_mp_mul_digs.c
-  libtommath/bn_fast_s_mp_sqr.c
   libtommath/bn_mp_add.c
   libtommath/bn_mp_add_d.c
   libtommath/bn_mp_and.c
@@ -872,21 +886,18 @@ SET(TCL_TOMMATH_SRCS
   libtommath/bn_mp_copy.c
   libtommath/bn_mp_count_bits.c
   libtommath/bn_mp_div.c
+  libtommath/bn_mp_div_d.c
   libtommath/bn_mp_div_2.c
   libtommath/bn_mp_div_2d.c
-  libtommath/bn_mp_div_3.c
-  libtommath/bn_mp_div_d.c
+  libtommath/bn_s_mp_div_3.c
   libtommath/bn_mp_exch.c
-  libtommath/bn_mp_expt_d.c
+  libtommath/bn_mp_expt_n.c
   libtommath/bn_mp_grow.c
   libtommath/bn_mp_init.c
   libtommath/bn_mp_init_copy.c
   libtommath/bn_mp_init_multi.c
   libtommath/bn_mp_init_set.c
-  libtommath/bn_mp_init_set_int.c
   libtommath/bn_mp_init_size.c
-  libtommath/bn_mp_karatsuba_mul.c
-  libtommath/bn_mp_karatsuba_sqr.c
   libtommath/bn_mp_lshd.c
   libtommath/bn_mp_mod.c
   libtommath/bn_mp_mod_2d.c
@@ -896,31 +907,37 @@ SET(TCL_TOMMATH_SRCS
   libtommath/bn_mp_mul_d.c
   libtommath/bn_mp_neg.c
   libtommath/bn_mp_or.c
+  libtommath/bn_mp_pack.c
+  libtommath/bn_mp_pack_count.c
   libtommath/bn_mp_radix_size.c
   libtommath/bn_mp_radix_smap.c
   libtommath/bn_mp_read_radix.c
   libtommath/bn_mp_rshd.c
   libtommath/bn_mp_set.c
-  libtommath/bn_mp_set_int.c
   libtommath/bn_mp_shrink.c
   libtommath/bn_mp_sqr.c
   libtommath/bn_mp_sqrt.c
   libtommath/bn_mp_sub.c
   libtommath/bn_mp_sub_d.c
-  libtommath/bn_mp_to_unsigned_bin.c
-  libtommath/bn_mp_to_unsigned_bin_n.c
-  libtommath/bn_mp_toom_mul.c
-  libtommath/bn_mp_toom_sqr.c
-  libtommath/bn_mp_toradix_n.c
-  libtommath/bn_mp_unsigned_bin_size.c
+  libtommath/bn_mp_signed_rsh.c
+  libtommath/bn_mp_to_ubin.c
+  libtommath/bn_mp_to_radix.c
+  libtommath/bn_mp_ubin_size.c
+  libtommath/bn_mp_unpack.c
   libtommath/bn_mp_xor.c
   libtommath/bn_mp_zero.c
-  libtommath/bn_reverse.c
   libtommath/bn_s_mp_add.c
+  libtommath/bn_s_mp_balance_mul.c
+  libtommath/bn_s_mp_karatsuba_mul.c
+  libtommath/bn_s_mp_karatsuba_sqr.c
   libtommath/bn_s_mp_mul_digs.c
+  libtommath/bn_s_mp_mul_digs_fast.c
+  libtommath/bn_s_mp_reverse.c
   libtommath/bn_s_mp_sqr.c
+  libtommath/bn_s_mp_sqr_fast.c
   libtommath/bn_s_mp_sub.c
-  libtommath/bncore.c
+  libtommath/bn_s_mp_toom_sqr.c
+  libtommath/bn_s_mp_toom_mul.c
   )
 
 SET(TCL_OSX_SRCS
@@ -1021,6 +1038,8 @@ IF(MINGW)
 ENDIF(MINGW)
 
 add_library(Tcl ${TCL_SRCS})
+target_compile_definitions(Tcl PRIVATE "BUILD_tcl" "HAVE_ZLIB" "MP_FIXED_CUTOFFS")
+target_link_libraries(Tcl ZLIB::ZLIB)
 target_link_libraries(Tcl ${CoreFoundation_LIBRARIES} ${TCL_LINK_LIBS} ${DL_LIBRARY} ${CMAKE_THREAD_LIBS_INIT} ${TCL_MINGW_LIBS})
 install(TARGETS Tcl 
 	RUNTIME DESTINATION ${BIN_DIR}
